@@ -59,48 +59,72 @@ def find_ncnn_tools():
         "..",
         os.path.expanduser("~"),
         "C:/",
+        "D:/",
         os.path.expanduser("~/ncnn"),
         "/usr/local",
         "/opt",
+        "D:/ncnn",
     ]
     
     patterns = [
-        "*ncnn*/x64/bin/cnnoptimize.exe",
-        "*ncnn*/x64/bin/cnnoptimize",
-        "*ncnn*/bin/cnnoptimize",
-        "*ncnn*/bin/onnx2ncnn",
-        "cnnoptimize.exe",
-        "cnnoptimize",
+        "*/x64/bin/ncnnoptimize.exe",
+        "*/x64/bin/ncnnoptimize",
+        "*/bin/ncnnoptimize.exe",
+        "*/bin/ncnnoptimize",
+        "ncnnoptimize.exe",
+        "ncnnoptimize",
     ]
     
     for base in base_dirs:
+        if not os.path.exists(base):
+            continue
         for pattern in patterns:
-            matches = glob.glob(os.path.join(base, pattern), recursive=True)
+            full_pattern = os.path.join(base, pattern)
+            matches = glob.glob(full_pattern, recursive=True)
             if matches:
                 return os.path.dirname(matches[0])
     
+    # Try direct path for D:/ncnn
+    direct_path = "D:/ncnn/ncnn-20260113-windows-vs2022/x64/bin"
+    if os.path.exists(os.path.join(direct_path, "ncnnoptimize.exe")):
+        return direct_path
+    
     import shutil
-    if shutil.which('cnnoptimize'):
+    if shutil.which('ncnnoptimize') or shutil.which('ncnnoptimize.exe'):
         return ""
     
     return None
 
 
 def find_ncnn_tool(tool_name):
+    # pnnx is the recommended tool for ONNX conversion
+    import shutil
+    if tool_name == "pnnx" or tool_name == "onnx2ncnn":
+        res = shutil.which("pnnx")
+        if res:
+            return res
+        # Try common paths
+        pnnx_paths = [
+            os.path.expanduser("~/AppData/Roaming/Python/Python314/Scripts/pnnx.exe"),
+            "C:/Users/buryang/AppData/Roaming/Python/Python314/Scripts/pnnx.exe",
+        ]
+        for p in pnnx_paths:
+            if os.path.exists(p):
+                return p
+        return None
+    
     ncnn_dir = find_ncnn_tools()
     if ncnn_dir and os.path.isdir(ncnn_dir):
+        # Try exact name
         exe = os.path.join(ncnn_dir, tool_name)
         if os.path.exists(exe):
             return exe
-
+        
+        # Try with .exe
         exe = os.path.join(ncnn_dir, tool_name + ".exe")
         if os.path.exists(exe):
             return exe
 
-    import shutil
-    res = shutil.which(tool_name)
-    if res:
-        return res
     return None
 
 
@@ -191,35 +215,47 @@ def generate_calibration_table(onnx_path, param_path, bin_path, calibration_dir)
         bin_path,
         list_file,
         table_path,
-        "0=0,0,0",
-        "1=1,1,1",
-        "640",
-        "640",
-        "0",
-        "255"
+        "mean=[0.0,0.0,0.0]",
+        "norm=[0.00392,0.00392,0.00392]",
+        "shape=[640,640,3]",
+        "pixel=BGR",
+        "method=kl"
     ]
 
     try:
-        subprocess.run(cmd, check=True)
-        print(f"[INFO] Calibration table saved: {table_path}")
-        return table_path
-    except:
-        return None
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, errors='ignore')
+        if os.path.exists(table_path):
+            print(f"[INFO] Calibration table saved: {table_path}")
+            return table_path
+    except Exception as e:
+        print(f"[ERROR] ncnn2table failed: {e}")
+    
+    return None
 
 
 def convert_to_ncnn(onnx_path, use_quant=False, calibration_dir=None):
-    cnnoptimize = find_ncnn_tool("cnnoptimize")
-    if not cnnoptimize:
-        return False, None, None, "TOOL_NOT_FOUND", "cnnoptimize not found"
+    pnnx = find_ncnn_tool("pnnx")
+    if not pnnx:
+        return False, None, None, "TOOL_NOT_FOUND", "pnnx not found (run: pip install pnnx)"
 
     base = os.path.splitext(onnx_path)[0]
-    param = base + ".param"
-    bin = base + ".bin"
+    param = base + ".ncnn.param"
+    bin = base + ".ncnn.bin"
 
     try:
-        subprocess.run([cnnoptimize, onnx_path, param, bin, "1"], check=True)
-    except:
-        return False, None, None, "CONVERT_FAILED", "cnnoptimize failed"
+        subprocess.run([pnnx, onnx_path], check=True, capture_output=True, text=True)
+        # pnnx outputs yolov8n.ncnn.param and yolov8n.ncnn.bin
+        expected_param = base + ".ncnn.param"
+        expected_bin = base + ".ncnn.bin"
+        if os.path.exists(expected_param) and os.path.exists(expected_bin):
+            param = expected_param
+            bin = expected_bin
+        else:
+            return False, None, None, "CONVERT_FAILED", "pnnx failed to produce output"
+    except subprocess.CalledProcessError as e:
+        return False, None, None, "CONVERT_FAILED", f"pnnx failed: {e.stderr}"
+    except Exception as e:
+        return False, None, None, "CONVERT_FAILED", str(e)
 
     if not use_quant or not calibration_dir or not os.path.isdir(calibration_dir):
         return True, param, bin, None, None
