@@ -1,0 +1,66 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+struct Detection {
+    vec4 box;
+    float prob;
+    int label;
+    int valid;
+};
+
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    Detection detections[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputBuffer {
+    Detection output_dets[];
+};
+
+layout(std430, binding = 2) writeonly buffer CountBuffer {
+    int output_count;
+};
+
+layout(push_constant) uniform PushConstants {
+    int num_detections;
+    float nms_threshold;
+    int max_output;
+    int num_classes;
+} pc;
+
+float iou(vec4 a, vec4 b) {
+    float x1 = max(a.x, b.x);
+    float y1 = max(a.y, b.y);
+    float x2 = min(a.z, b.z);
+    float y2 = min(a.w, b.w);
+
+    float inter = max(0.0, x2 - x1) * max(0.0, y2 - y1);
+    float area_a = (a.z - a.x) * (a.w - a.y);
+    float area_b = (b.z - b.x) * (b.w - b.y);
+    float union_area = area_a + area_b - inter;
+
+    return inter / (union_area + 1e-6);
+}
+
+void main() {
+    int idx = int(gl_GlobalInvocationID.x);
+    if (idx >= pc.num_detections) return;
+
+    Detection det = detections[idx];
+    if (det.valid == 0 || det.prob < 0.001) return;
+
+    for (int i = 0; i < idx; i++) {
+        Detection other = detections[i];
+        if (other.valid == 0) continue;
+        if (other.label != det.label) continue;
+
+        if (iou(det.box, other.box) > pc.nms_threshold) {
+            return;
+        }
+    }
+
+    int out_idx = atomicAdd(output_count, 1);
+    if (out_idx < pc.max_output) {
+        output_dets[out_idx] = det;
+    }
+}
