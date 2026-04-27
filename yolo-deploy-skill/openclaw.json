@@ -1,0 +1,112 @@
+{
+  "version": "1.0.0",
+  "name": "yolo-deploy-agent",
+  "description": "YOLO 模型部署助手 - 自动完成 ONNX 导出、NCNN 量化、推理测试",
+  "skill": "yolo-deploy",
+  
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514",
+    "temperature": 0.1
+  },
+  
+  "workspace": {
+    "root": "..",
+    "allowed_paths": [
+      "./yolo-deploy-skill/**",
+      "./python/**",
+      "./cpp/**",
+      "./tools/**",
+      "./shader/**"
+    ]
+  },
+  
+  "tools": {
+    "python_execute": {
+      "enabled": true,
+      "timeout": 300,
+      "allowed_commands": [
+        "python*/**",
+        "yolo-deploy-skill/**"
+      ]
+    },
+    "shell_run": {
+      "enabled": true,
+      "timeout": 300,
+      "allowed_commands": [
+        "python*",
+        "./cpp/build/**",
+        "./cmake-build-*/**"
+      ]
+    },
+    "file_read": {
+      "enabled": true,
+      "patterns": [
+        "./yolo-deploy-skill/**",
+        "./python/**",
+        "./cpp/**",
+        "./tools/**"
+      ],
+      "exclude": [
+        "**/.git/**",
+        "**/node_modules/**"
+      ]
+    },
+    "file_write": {
+      "enabled": true,
+      "patterns": [
+        "./yolo-deploy-skill/**"
+      ],
+      "exclude": [
+        "**/.git/**"
+      ]
+    }
+  },
+  
+  "system_prompts": {
+    "soul": "prompts/SOUL.md",
+    "workflow": "prompts/workflow.md"
+  },
+  
+  "commands": {
+    "full": {
+      "description": "完整流程：导出 → 量化 → 转换 → 推理",
+      "required_args": ["--weights"],
+      "optional_args": ["--image", "--fp16", "--quant", "--calibration-images", "--conf", "--iou", "--threads"],
+      "example": "部署 yolov8n.pt 到 NCNN: python yolo-deploy-skill/yolo_deploy.py full --weights yolov8n.pt --image test.jpg"
+    },
+    "export": {
+      "description": "仅导出 ONNX 模型",
+      "required_args": ["--weights"],
+      "optional_args": ["--img-size", "--fp16", "--model-type", "--verify"],
+      "example": "导出 yolov8n.pt: python yolo-deploy-skill/yolo_deploy.py export --weights yolov8n.pt"
+    },
+    "quantize": {
+      "description": "量化并转换为 NCNN",
+      "required_args": ["--onnx"],
+      "optional_args": ["--to-ncnn", "--quant", "--calibration-images", "--ncnn-tools-path"],
+      "example": "转换 ONNX: python yolo-deploy-skill/yolo_deploy.py quantize --onnx yolov8n.onnx --to-ncnn"
+    },
+    "inference": {
+      "description": "运行推理测试",
+      "required_args": ["--param", "--bin", "--image"],
+      "optional_args": ["--output", "--conf", "--iou", "--threads", "--quant", "--verbose"],
+      "example": "推理测试: python yolo-deploy-skill/yolo_deploy.py inference --param yolo.param --bin yolo.bin --image test.jpg"
+    },
+    "status": {
+      "description": "检查环境状态",
+      "required_args": [],
+      "optional_args": [],
+      "example": "检查环境: python yolo-deploy-skill/yolo_deploy.py status"
+    }
+  },
+  
+  "defaults": {
+    "img_size": 640,
+    "conf_threshold": 0.25,
+    "iou_threshold": 0.45,
+    "threads": 4,
+    "fp16": false,
+    "quant": false
+  }
+}

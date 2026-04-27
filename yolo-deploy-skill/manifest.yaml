@@ -1,0 +1,46 @@
+name: yolo-deploy
+version: 1.0.0
+description: YOLO 模型导出、量化、NCNN 推理全流程自动化
+author: Buryang
+license: MIT
+
+capabilities:
+  - 模型导出 (PT → ONNX)
+  - 模型量化 (FP32/FP16/INT8)
+  - NCNN 转换与优化
+  - 推理测试
+  - 结果可视化
+
+dependencies:
+  - python >= 3.8
+  - torch
+  - ultralytics
+  - onnx
+  - onnxruntime
+  - opencv-python
+
+tools:
+  - name: python_execute
+    description: 执行 Python 脚本
+  - name: shell_run
+    description: 运行 shell 命令
+  - name: file_read
+    description: 读取文件
+  - name: file_write
+    description: 写入文件
+
+workflows:
+  - name: full_pipeline
+    description: 完整流程：导出 → 量化 → 转换 → 推理测试
+  - name: export_only
+    description: 仅导出 ONNX 模型
+  - name: quantize_only
+    description: 仅量化并转换 NCNN
+  - name: infer_only
+    description: 仅运行推理测试
+
+configuration:
+  default_img_size: 640
+  default_conf_threshold: 0.25
+  default_iou_threshold: 0.45
+  ncnn_tools_path: ./tools/ncnn/ncnn-20260113-windows-vs2022/x64/bin
