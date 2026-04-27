@@ -42,21 +42,50 @@ python yolo-deploy-skill/yolo_deploy.py quantize --onnx yolov8n.onnx --to-ncnn
 python yolo-deploy-skill/yolo_deploy.py inference --param yolo.param --bin yolo.bin --image test.jpg
 ```
 
-### 2. 作为 OpenCLAW Skill 使用
+### 2. OpenCLAW Skill & Agent
 
-将 `yolo-deploy-skill/` 目录复制到 OpenCLAW 的 skills 目录，然后配置 Agent:
+#### 安装与启用
+
+```bash
+# 安装 Skill
+openclaw skill install ./yolo-deploy-skill
+
+# 启用 Skill
+openclaw skill enable yolo_deploy
+
+# 创建 Agent
+openclaw agent create yolo-deploy-agent
+```
+
+#### Agent 配置 (openclaw.json)
 
 ```json
 {
-  "agents": [
-    {
-      "name": "yolo-deploy",
-      "skill": "yolo-deploy",
-      "model": "claude-sonnet-4-20250514"
+  "version": "1.0.0",
+  "name": "yolo-deploy-agent",
+  "skill": "yolo-deploy",
+  "model": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-20250514"
+  },
+  "commands": {
+    "full": {
+      "description": "完整流程：导出 → 量化 → 转换 → 推理",
+      "required_args": ["--weights"]
     }
-  ]
+  }
 }
 ```
+
+#### 可用命令
+
+| 命令 | 说明 |
+|------|------|
+| `full` | 完整流程：导出 → 量化 → 转换 → 推理 |
+| `export` | 仅导出 ONNX 模型 |
+| `quantize` | 量化并转换为 NCNN |
+| `inference` | 运行推理测试 |
+| `status` | 检查环境状态 |
 
 ## 使用示例
 
