@@ -3,6 +3,10 @@ export yolo model to ncnn and do ptq calibration
 
 ## YOLOv8N NCNN INT8 量化部署
 YOLOv8N 模型转 NCNN + INT8 量化全流程与核心踩坑总结
+🔥 一条命令完成：PT → ONNX → NCNN → INT8 → C++ 推理
+🔥 无硬编码 | 任意路径 | 跨平台 | 低门槛 | 高可用
+🔥 企业/嵌入式/端侧部署首选流水线
+🔥 支持openclaw agent模式
 
 ---
 
