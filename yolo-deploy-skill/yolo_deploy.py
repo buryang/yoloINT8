@@ -21,8 +21,7 @@ class YOLODeploy:
         if base_dir:
             self.base_dir = Path(base_dir).resolve()
         else:
-            skill_dir = Path(__file__).parent.resolve()
-            self.base_dir = skill_dir.parent
+            self.base_dir = Path(__file__).parent.resolve()
         
         self.python_dir = self.base_dir / "python"
         self.cpp_dir = self.base_dir / "cpp"

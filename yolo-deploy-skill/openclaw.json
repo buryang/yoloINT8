@@ -13,11 +13,7 @@
   "workspace": {
     "root": "..",
     "allowed_paths": [
-      "./yolo-deploy-skill/**",
-      "./python/**",
-      "./cpp/**",
-      "./tools/**",
-      "./shader/**"
+      "./yolo-deploy-skill/**"
     ]
   },
   
@@ -42,10 +38,7 @@
     "file_read": {
       "enabled": true,
       "patterns": [
-        "./yolo-deploy-skill/**",
-        "./python/**",
-        "./cpp/**",
-        "./tools/**"
+        "./yolo-deploy-skill/**"
       ],
       "exclude": [
         "**/.git/**",
