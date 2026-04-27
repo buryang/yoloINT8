@@ -53,3 +53,11 @@ model.export(
     opset=12,
     nms=False
 )
+
+
+## Skill & Agent
+
+openclaw skill install ./yolo-deploy-skill
+openclaw skill enable yolo_deploy
+
+openclaw agent create yolo-deploy-agent
