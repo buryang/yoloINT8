@@ -3,6 +3,40 @@ import os
 import sys
 import subprocess
 import glob
+import json
+import traceback
+from datetime import datetime
+
+LOG_FILE = "quantize.log"
+
+def log(message, level="INFO"):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] [{level}] {message}"
+    print(log_entry)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(log_entry + "\n")
+
+def log_error(e=None):
+    if e:
+        log(f"ERROR: {str(e)}", "ERROR")
+        log(traceback.format_exc(), "ERROR")
+    else:
+        log("Unknown error occurred", "ERROR")
+
+def output_result(success, onnx_path=None, param_path=None, bin_path=None, error=None, error_type=None):
+    result = {
+        "success": success,
+        "onnx_path": onnx_path,
+        "param_path": param_path,
+        "bin_path": bin_path,
+        "error": error,
+        "error_type": error_type,
+        "log_file": LOG_FILE
+    }
+    print("\n" + "="*50)
+    print("RESULT:" + json.dumps(result))
+    print("="*50 + "\n")
+    return result
 
 try:
     import onnx
@@ -282,12 +316,12 @@ def convert_to_ncnn(onnx_path, ncnn_dir=None, use_quant=False, calibration_dir=N
     ncnn_optimize = find_ncnn_tools()
     
     if not ncnn_optimize:
-        print("[ERROR] NCNN conversion tool not found")
-        print("[INFO] Please download NCNN from: https://github.com/Tencent/ncnn/releases")
-        return False, None, None
+        log("NCNN conversion tool not found", "ERROR")
+        log("Please download NCNN from: https://github.com/Tencent/ncnn/releases")
+        return False, None, None, "TOOL_NOT_FOUND", "NCNN tools not found"
     
     if ncnn_optimize and not os.path.exists(ncnn_optimize):
-        print(f"[WARNING] Tool not found at {ncnn_optimize}, trying system PATH")
+        log(f"Tool not found at {ncnn_optimize}, trying system PATH", "WARNING")
         ncnn_optimize = os.path.basename(ncnn_optimize)
     
     base_name = os.path.splitext(onnx_path)[0]
@@ -296,35 +330,32 @@ def convert_to_ncnn(onnx_path, ncnn_dir=None, use_quant=False, calibration_dir=N
     
     cmd = [ncnn_optimize, onnx_path, param_path, bin_path, "1"]
     
-    print(f"[INFO] Running: {' '.join(cmd)}")
+    log(f"Running: {' '.join(cmd)}")
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
         if result.returncode == 0:
-            print(f"[SUCCESS] NCNN conversion completed:")
-            print(f"  Param: {param_path}")
-            print(f"  Bin: {bin_path}")
+            log(f"NCNN conversion completed: Param: {param_path}, Bin: {bin_path}")
         else:
-            print(f"[ERROR] NCNN conversion failed:")
-            print(result.stderr)
-            return False, None, None
+            log(f"NCNN conversion failed: {result.stderr}", "ERROR")
+            return False, None, None, "CONVERT_FAILED", result.stderr
             
     except subprocess.TimeoutExpired:
-        print("[ERROR] NCNN conversion timeout")
-        return False, None, None
+        log("NCNN conversion timeout", "ERROR")
+        return False, None, None, "TIMEOUT", "Conversion timeout"
     except FileNotFoundError:
-        print(f"[ERROR] Tool not found: {ncnn_optimize}")
-        return False, None, None
+        log(f"Tool not found: {ncnn_optimize}", "ERROR")
+        return False, None, None, "TOOL_NOT_FOUND", f"Tool not found: {ncnn_optimize}"
     except Exception as e:
-        print(f"[ERROR] Failed to run ncnn-optimize: {e}")
-        return False, None, None
+        log_error(e)
+        return False, None, None, "RUN_ERROR", str(e)
 
     if use_quant and calibration_dir:
         ncnn2int8 = find_ncnn2int8()
         if not ncnn2int8:
-            print("[WARNING] ncnn2int8 not found, skipping quantization")
-            return True, param_path, bin_path
+            log("ncnn2int8 not found, skipping quantization", "WARNING")
+            return True, param_path, bin_path, None, None
         
         if not os.path.exists(ncnn2int8):
             ncnn2int8 = os.path.basename(ncnn2int8)
@@ -339,21 +370,22 @@ def convert_to_ncnn(onnx_path, ncnn_dir=None, use_quant=False, calibration_dir=N
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             if result.returncode == 0:
-                print(f"[SUCCESS] INT8 quantization completed:")
-                print(f"  Param: {quant_param_path}")
-                print(f"  Bin: {quant_bin_path}")
-                return True, quant_param_path, quant_bin_path
+                log(f"INT8 quantization completed: Param: {quant_param_path}, Bin: {quant_bin_path}")
+                return True, quant_param_path, quant_bin_path, None, None
             else:
-                print(f"[WARNING] Quantization failed: {result.stderr}")
-                return True, param_path, bin_path
+                log(f"Quantization failed: {result.stderr}", "WARNING")
+                return True, param_path, bin_path, None, None
         except Exception as e:
-            print(f"[ERROR] Quantization error: {e}")
-            return True, param_path, bin_path
+            log(f"Quantization error: {e}", "ERROR")
+            return True, param_path, bin_path, None, None
     
-    return True, param_path, bin_path
+    return True, param_path, bin_path, None, None
 
 
 def main():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    
     parser = argparse.ArgumentParser(description='Calibrate and convert YOLO ONNX to NCNN')
     parser.add_argument('--input', type=str, required=True, help='Input ONNX file')
     parser.add_argument('--calibration-images', type=str, default=None, 
@@ -374,15 +406,17 @@ def main():
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
-        print(f"[ERROR] Input file not found: {args.input}")
+        log(f"Input file not found: {args.input}", "ERROR")
+        output_result(False, onnx_path=args.input, error=f"Input file not found: {args.input}", error_type="FILE_NOT_FOUND")
         sys.exit(1)
 
     if args.quant and not args.calibration_images:
-        print("[INFO] Quantization enabled but no calibration images provided")
+        log("Quantization enabled but no calibration images provided", "INFO")
 
     if args.verify:
         if not verify_onnx_model(args.input):
-            print("[ERROR] Model verification failed, aborting")
+            log("Model verification failed, aborting", "ERROR")
+            output_result(False, onnx_path=args.input, error="Model verification failed", error_type="VERIFY_FAILED")
             sys.exit(1)
 
     if args.calibration_images and os.path.exists(args.calibration_images):
@@ -397,10 +431,10 @@ def main():
         if calibrator.collect():
             activation_ranges = calibrator.run_calibration(args.input)
             if activation_ranges:
-                print(f"[INFO] Calibration collected {len(activation_ranges)} activation ranges")
+                log(f"Calibration collected {len(activation_ranges)} activation ranges")
 
     if args.to_ncnn:
-        success, param_path, bin_path = convert_to_ncnn(
+        success, param_path, bin_path, error_type, error_msg = convert_to_ncnn(
             args.input, 
             ncnn_dir=args.ncnn_tools_path,
             use_quant=args.quant,
@@ -408,19 +442,18 @@ def main():
         )
         
         if success and param_path and bin_path:
-            print("\n[SUCCESS] Conversion completed!")
-            print(f"  ONNX: {args.input}")
-            print(f"  NCNN param: {param_path}")
-            print(f"  NCNN bin: {bin_path}")
-            print(f"\n[INFO] To run inference:")
-            print(f"  ./yolo_inference {param_path} {bin_path} <image.jpg>")
+            log("Conversion completed!")
+            output_result(True, onnx_path=args.input, param_path=param_path, bin_path=bin_path)
+            
+            log(f"To run inference: ./yolo_inference {param_path} {bin_path} <image.jpg>")
             if "quant" in param_path:
-                print(f"  ./yolo_inference {param_path} {bin_path} <image.jpg> --quant")
+                log(f"Or with quant: ./yolo_inference {param_path} {bin_path} <image.jpg> --quant")
         else:
-            print("[ERROR] NCNN conversion failed")
+            log(f"NCNN conversion failed: {error_msg}", "ERROR")
+            output_result(False, onnx_path=args.input, error=error_msg, error_type=error_type)
             sys.exit(1)
     else:
-        print("\n[INFO] Skipping NCNN conversion (use --to-ncnn to convert)")
+        log("Skipping NCNN conversion (use --to-ncnn to convert)")
 
 
 if __name__ == '__main__':

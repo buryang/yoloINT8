@@ -2,6 +2,39 @@ import argparse
 import sys
 import os
 import shutil
+import json
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+LOG_FILE = "export_onnx.log"
+
+def log(message, level="INFO"):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] [{level}] {message}"
+    print(log_entry)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(log_entry + "\n")
+
+def log_error(e=None):
+    if e:
+        log(f"ERROR: {str(e)}", "ERROR")
+        log(traceback.format_exc(), "ERROR")
+    else:
+        log("Unknown error occurred", "ERROR")
+
+def output_result(success, onnx_path=None, error=None, error_type=None):
+    result = {
+        "success": success,
+        "onnx_path": onnx_path,
+        "error": error,
+        "error_type": error_type,
+        "log_file": LOG_FILE
+    }
+    print("\n" + "="*50)
+    print("RESULT:" + json.dumps(result))
+    print("="*50 + "\n")
+    return result
 
 try:
     import torch
@@ -55,19 +88,19 @@ def load_yolov5(weights):
 
 
 def export_yolov5_to_onnx(weights, img_size=640, fp16=False):
-    print(f"[YOLOv5] Loading model from {weights}")
+    log(f"Loading model from {weights}")
     
     try:
         model = load_yolov5(weights)
     except Exception as e:
-        print(f"[ERROR] {e}")
-        return None
+        log_error(e)
+        return None, "LOAD_FAILED", str(e)
 
     output_path = os.path.splitext(weights)[0] + ".onnx"
     if fp16:
         output_path = os.path.splitext(weights)[0] + "_fp16.onnx"
 
-    print(f"[YOLOv5] Exporting to {output_path}")
+    log(f"Exporting to {output_path}")
 
     dummy_input = torch.randn(1, 3, img_size, img_size)
     
@@ -89,35 +122,35 @@ def export_yolov5_to_onnx(weights, img_size=640, fp16=False):
         )
         
         if not os.path.exists(output_path):
-            print(f"[ERROR] Export failed, file not created")
-            return None
+            log("Export failed, file not created", "ERROR")
+            return None, "EXPORT_FAILED", "File not created"
         
-        print(f"[YOLOv5] Export completed: {output_path}")
-        return output_path
+        log(f"Export completed: {output_path}")
+        return output_path, None, None
         
     except Exception as e:
-        print(f"[ERROR] Export failed: {e}")
-        return None
+        log_error(e)
+        return None, "EXPORT_FAILED", str(e)
 
 
 def export_yolov8_to_onnx(weights, img_size=640, fp16=False):
     try:
         from ultralytics import YOLO
     except ImportError:
-        print("[ERROR] ultralytics not installed. Run: pip install ultralytics")
-        return None
+        log("ultralytics not installed. Run: pip install ultralytics", "ERROR")
+        return None, "DEPENDENCY_MISSING", "ultralytics not installed"
 
-    print(f"[YOLOv8] Loading model from {weights}")
+    log(f"Loading model from {weights}")
     
     if not os.path.exists(weights):
-        print(f"[ERROR] Weights file not found: {weights}")
-        return None
+        log(f"Weights file not found: {weights}", "ERROR")
+        return None, "FILE_NOT_FOUND", f"Weights not found: {weights}"
 
     try:
         model = YOLO(weights)
     except Exception as e:
-        print(f"[ERROR] Failed to load YOLOv8 model: {e}")
-        return None
+        log_error(e)
+        return None, "LOAD_FAILED", str(e)
     
     output_dir = os.path.dirname(weights) or "."
     output_name = os.path.splitext(os.path.basename(weights))[0] + ".onnx"
@@ -125,7 +158,7 @@ def export_yolov8_to_onnx(weights, img_size=640, fp16=False):
         output_name = os.path.splitext(os.path.basename(weights))[0] + "_fp16.onnx"
     output_path = os.path.join(output_dir, output_name)
 
-    print(f"[YOLOv8] Exporting to {output_path}")
+    log(f"Exporting to {output_path}")
 
     try:
         model.export(
@@ -150,37 +183,37 @@ def export_yolov8_to_onnx(weights, img_size=640, fp16=False):
                     output_path = os.path.join(output_dir, f)
                     break
         
-        print(f"[YOLOv8] Export completed: {output_path}")
-        return output_path
+        log(f"Export completed: {output_path}")
+        return output_path, None, None
         
     except Exception as e:
-        print(f"[ERROR] Export failed: {e}")
-        return None
+        log_error(e)
+        return None, "EXPORT_FAILED", str(e)
 
 
 def detect_model_type(weights):
     if not os.path.exists(weights):
-        return None
+        return None, "FILE_NOT_FOUND", f"Weights not found: {weights}"
     
     basename = os.path.basename(weights).lower()
     
     if 'yolov8' in basename or 'yolo8' in basename:
-        return 'v8'
+        return 'v8', None, None
     elif 'yolov5' in basename or 'yolo5' in basename:
-        return 'v5'
+        return 'v5', None, None
     elif 'yolov4' in basename or 'yolov3' in basename:
-        return 'v5'
+        return 'v5', None, None
     elif basename.endswith('.pt'):
         try:
             ckpt = torch.load(weights, map_location='cpu', weights_only=False)
             if 'model' in ckpt or 'ema' in ckpt:
-                return 'v5'
+                return 'v5', None, None
         except:
             pass
     
-    print(f"[WARNING] Cannot detect model type from filename: {weights}")
-    print("[INFO] Assuming YOLOv8 (default)")
-    return 'v8'
+    log(f"Cannot detect model type from filename: {weights}", "WARNING")
+    log("Assuming YOLOv8 (default)")
+    return 'v8', None, None
 
 
 def verify_onnx_model(model_path):
@@ -210,6 +243,9 @@ def verify_onnx_model(model_path):
 
 
 def main():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    
     parser = argparse.ArgumentParser(description='Export YOLO to ONNX')
     parser.add_argument('--weights', type=str, required=True, help='Path to .pt weights')
     parser.add_argument('--img-size', type=int, default=640, help='Input image size')
@@ -225,33 +261,38 @@ def main():
         args.img_size = ((args.img_size + 31) // 32) * 32
 
     if args.model_type == 'auto':
-        args.model_type = detect_model_type(args.weights)
+        args.model_type, et, em = detect_model_type(args.weights)
         if args.model_type is None:
-            print("[ERROR] Cannot determine model type")
+            log("Cannot determine model type", "ERROR")
+            output_result(False, error=em, error_type=et)
             sys.exit(1)
 
-    print(f"[INFO] Model type: {args.model_type}")
+    log(f"Model type: {args.model_type}")
 
     onnx_path = None
+    error_type = None
+    error_msg = None
     
     if args.model_type == 'v8':
-        onnx_path = export_yolov8_to_onnx(args.weights, args.img_size, args.fp16)
+        onnx_path, error_type, error_msg = export_yolov8_to_onnx(args.weights, args.img_size, args.fp16)
     else:
-        onnx_path = export_yolov5_to_onnx(args.weights, args.img_size, args.fp16)
+        onnx_path, error_type, error_msg = export_yolov5_to_onnx(args.weights, args.img_size, args.fp16)
 
     if onnx_path and os.path.exists(onnx_path):
-        print(f"[SUCCESS] ONNX export to {onnx_path}")
+        log(f"ONNX export to {onnx_path}")
         
         if args.verify:
             if verify_onnx_model(onnx_path):
-                print("[SUCCESS] Model verification passed")
+                log("Model verification passed")
             else:
-                print("[WARNING] Model verification failed")
+                log("Model verification failed", "WARNING")
         
-        print(f"\n[INFO] Next step: Convert to NCNN")
-        print(f"  python quantize.py --input {onnx_path} --to-ncnn")
+        output_result(True, onnx_path=onnx_path)
+        
+        log(f"Next step: python quantize.py --input {onnx_path} --to-ncnn")
     else:
-        print("[ERROR] Export failed")
+        log(f"Export failed: {error_msg}", "ERROR")
+        output_result(False, error=error_msg, error_type=error_type)
         sys.exit(1)
 
 

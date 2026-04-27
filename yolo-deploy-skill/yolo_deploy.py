@@ -104,6 +104,10 @@ class YOLODeploy:
     
     def _parse_onnx_path(self, output: str) -> Optional[str]:
         """从输出中解析 ONNX 文件路径"""
+        result_match = re.search(r'"onnx_path":\s*"([^"]+)"', output)
+        if result_match:
+            return result_match.group(1)
+        
         patterns = [
             r"ONNX export to (.+\.onnx)",
             r"Export completed: (.+\.onnx)",
@@ -117,6 +121,11 @@ class YOLODeploy:
     
     def _parse_ncnn_paths(self, output: str) -> Tuple[Optional[str], Optional[str]]:
         """从输出中解析 NCNN 文件路径"""
+        result_match = re.search(r'"param_path":\s*"([^"]+)"', output)
+        bin_match = re.search(r'"bin_path":\s*"([^"]+)"', output)
+        if result_match and bin_match:
+            return result_match.group(1), bin_match.group(1)
+        
         param_pattern = r"NCNN param: (.+\.param)"
         bin_pattern = r"NCNN bin: (.+\.bin)"
         
@@ -146,6 +155,17 @@ class YOLODeploy:
             })
         
         return detections
+    
+    def _parse_error_info(self, output: str) -> Optional[Dict]:
+        """从脚本输出解析错误信息"""
+        result_match = re.search(r'RESULT:(\{[^}]+\})', output)
+        if result_match:
+            try:
+                import json
+                return json.loads(result_match.group(1))
+            except:
+                pass
+        return None
     
     # ==================== 导出功能 ====================
     
