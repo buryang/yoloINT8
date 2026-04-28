@@ -166,6 +166,12 @@ cpp/ (推理实现)
 - onnxruntime
 - opencv-python
 
+## NCNN 版本
+
+- **ncnn-20230517** - 推荐用于INT8量化 (windows-vs2019)
+- **ncnn-20260113** - 用于C++推理 (windows-vs2022)
+- **pnnx** - 通过 pip 安装 (`pip install pnnx`)
+
 ## License
 
 MIT
