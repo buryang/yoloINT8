@@ -53,7 +53,7 @@
 ### 仅量化 (quantize_only)
 
 ```
-1️⃣ 量化 ONNX
+1️⃣ 量化 ONNX (默认使用 ACIQ 方法，比KL更精准)
 2️⃣ 转换 NCNN
 3️⃣ 返回 param/bin 路径
 ```
@@ -80,6 +80,13 @@
 | `--conf` | 置信度阈值 | 0.25 |
 | `--iou` | NMS IoU 阈值 | 0.45 |
 | `--threads` | 线程数 | 4 |
+
+## 量化方法
+
+INT8 量化默认使用 **ACIQ** (Adaptive Clipping for Integer Quantization) 方法：
+- 比 KL 散度更精准
+- 自动为每层计算最优裁剪阈值
+- 校准建议：50-100张有代表性的图像
 
 ---
 
