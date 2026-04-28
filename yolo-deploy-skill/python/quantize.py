@@ -53,7 +53,11 @@ except ImportError:
 
 
 def find_ncnn_tools():
+    # Prefer old version (ncnn-20230517) for INT8 quantization
     base_dirs = [
+        "D:/ncnn/ncnn-20230517/ncnn-20230517-windows-vs2019/x64/bin",
+        "D:/ncnn/ncnn-20260113-windows-vs2022/x64/bin",
+        "D:/ncnn/ncnn-20231219-windows-vs2022/x64/bin",
         os.path.dirname(os.path.abspath(__file__)),
         ".",
         "..",
@@ -63,7 +67,6 @@ def find_ncnn_tools():
         os.path.expanduser("~/ncnn"),
         "/usr/local",
         "/opt",
-        "D:/ncnn",
     ]
     
     patterns = [
@@ -84,15 +87,6 @@ def find_ncnn_tools():
             if matches:
                 return os.path.dirname(matches[0])
     
-    # Try direct path for D:/ncnn
-    direct_path = "D:/ncnn/ncnn-20260113-windows-vs2022/x64/bin"
-    if os.path.exists(os.path.join(direct_path, "ncnnoptimize.exe")):
-        return direct_path
-    
-    import shutil
-    if shutil.which('ncnnoptimize') or shutil.which('ncnnoptimize.exe'):
-        return ""
-    
     return None
 
 
@@ -103,15 +97,41 @@ def find_ncnn_tool(tool_name):
         res = shutil.which("pnnx")
         if res:
             return res
-        # Try common paths
+        
+        # Also check common install locations
         pnnx_paths = [
             os.path.expanduser("~/AppData/Roaming/Python/Python314/Scripts/pnnx.exe"),
-            "C:/Users/buryang/AppData/Roaming/Python/Python314/Scripts/pnnx.exe",
+            os.path.expanduser("~/AppData/Roaming/Python/Python313/Scripts/pnnx.exe"),
+            os.path.expanduser("~/AppData/Roaming/Python/Python312/Scripts/pnnx.exe"),
         ]
         for p in pnnx_paths:
             if os.path.exists(p):
                 return p
-        return None
+    
+    # For INT8 quantization, prefer old version tools (ncnn-20230517) which work correctly
+    # Fall back to newer version if old not found
+    ncnn_versions = [
+        "D:/ncnn/ncnn-20230517/ncnn-20230517-windows-vs2019/x64/bin",
+        "D:/ncnn/ncnn-20260113-windows-vs2022/x64/bin",
+        "D:/ncnn/ncnn-20231219-windows-vs2022/x64/bin",
+    ]
+    
+    for base_dir in ncnn_versions:
+        tool_path = os.path.join(base_dir, tool_name + ".exe")
+        if os.path.exists(tool_path):
+            return tool_path
+        
+        # Also try without .exe
+        tool_path_nx = os.path.join(base_dir, tool_name)
+        if os.path.exists(tool_path_nx):
+            return tool_path_nx
+    
+    # Try system PATH
+    res = shutil.which(tool_name + ".exe") or shutil.which(tool_name)
+    if res:
+        return res
+    
+    return None
     
     ncnn_dir = find_ncnn_tools()
     if ncnn_dir and os.path.isdir(ncnn_dir):
@@ -219,7 +239,7 @@ def generate_calibration_table(onnx_path, param_path, bin_path, calibration_dir)
         "norm=[0.00392,0.00392,0.00392]",
         "shape=[640,640,3]",
         "pixel=BGR",
-        "method=kl"
+        "method=aciq"
     ]
 
     try:

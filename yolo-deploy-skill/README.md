@@ -134,6 +134,14 @@ Step 3: 推理测试
 | `--iou` | NMS IoU 阈值 | 0.45 |
 | `--threads` | 线程数 | 4 |
 
+### INT8 量化方法
+
+默认使用 **ACIQ** (Adaptive Clipping for Integer Quantization) 方法，相比KL散度更精准。
+
+校准建议：
+- 推荐使用 **50-100张** 有代表性的图像
+- 图像应覆盖实际推理场景
+
 ## 与现有脚本的关系
 
 ```

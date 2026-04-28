@@ -75,9 +75,9 @@
       "example": "导出 yolov8n.pt: python yolo-deploy-skill/yolo_deploy.py export --weights yolov8n.pt"
     },
     "quantize": {
-      "description": "量化并转换为 NCNN",
+      "description": "量化并转换为 NCNN (默认使用ACIQ方法量化)",
       "required_args": ["--onnx"],
-      "optional_args": ["--to-ncnn", "--quant", "--calibration-images", "--ncnn-tools-path"],
+      "optional_args": ["--to-ncnn", "--quant", "--calibration-images", "--ncnn-tools-path", "--method"],
       "example": "转换 ONNX: python yolo-deploy-skill/yolo_deploy.py quantize --onnx yolov8n.onnx --to-ncnn"
     },
     "inference": {

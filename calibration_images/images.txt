@@ -1,0 +1,2 @@
+D:/Exp/yoloINT8/calibration_images\img1.jpg
+D:/Exp/yoloINT8/calibration_images\img2.jpg
